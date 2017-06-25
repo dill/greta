@@ -25,12 +25,12 @@ check_gpflowr <- function () {
 }
 
 # create a greta kernel function (to create ops)
-greta_kernel <- function (kernel_name, parameters, gpflow_method, input_dim) {
+greta_kernel <- function (kernel_name, gpflow_name, parameters, arguments) {
 
   # check GPflow is available and get the kernel method
   check_gpflowr()
 
-  gpflow_method <- gpflow$kernels[[gpflow_method]]
+  gpflow_method <- gpflow$kernels[[gpflow_name]]
 
   kernel_name <- paste(kernel_name, "kernel function")
 
@@ -39,7 +39,7 @@ greta_kernel <- function (kernel_name, parameters, gpflow_method, input_dim) {
   kernel <- list(name = kernel_name,
                  parameters = parameters,
                  gpflow_method = gpflow_method,
-                 input_dim = input_dim)
+                 arguments = arguments)
 
   # check and get the dimension of a target matrix
   get_dim <- function (x, name = 'X') {
@@ -114,8 +114,9 @@ greta_kernel <- function (kernel_name, parameters, gpflow_method, input_dim) {
 
 }
 
+#' @export
 print.greta_kernel_function <- function (x, ...)
-  cat(kern <- environment(x)$kernel$name, "\n")
+  cat(environment(x)$kernel$name, "\n")
 
 # overload addition and multiplication of greta kernels
 # - grab their kernel objects and combine them; then return a kernel function with that information
@@ -129,8 +130,8 @@ compile_gpflow_kernel <- function (greta_kernel, tf_parameters) {
   # for now just do flat version
 
   # get gpflow version
-  dim <- as.integer(greta_kernel$input_dim)
-  gpflow_kernel <- greta_kernel$gpflow_method(dim)
+  gpflow_kernel <- do.call(greta_kernel$gpflow_method,
+                           greta_kernel$arguments)
 
   # put tensor in the gpflow kernel object
   parameter_names <- names(greta_kernel$parameters)
@@ -170,22 +171,82 @@ tf_self_K <- function (X, ..., greta_kernel) {
 
 # make kernel constructors
 
-# return an R function to evaluate the kernel with these parameters
-bias <- function (variance, dim = 1) {
+bias_kernel <- function (variance, dim = 1) {
   greta_kernel("bias",
+               gpflow_name = "Bias",
                parameters = list(variance = variance),
-               gpflow_method = "Bias",
-               input_dim = dim)
+               arguments = list(input_dim = as.integer(dim)))
 }
 
-# return an R function to evaluate the kernel with these parameters
-rbf <- function (lengthscales, variance) {
+white_kernel <- function (variance, dim = 1) {
+  greta_kernel("white",
+               gpflow_name = "White",
+               parameters = list(variance = variance),
+               arguments = list(input_dim = as.integer(dim)))
+}
+
+linear_kernel <- function (variances) {
+  greta_kernel("linear",
+               gpflow_name = 'Linear',
+               parameters = list(variance = variances),
+               arguments = list(input_dim = length(variances),
+                                ARD = TRUE))
+}
+
+rbf_kernel <- function (lengthscales, variance) {
   greta_kernel("radial basis",
+               gpflow_name = 'RBF',
                parameters = list(lengthscales = t(lengthscales),
                                  variance = variance),
-               gpflow_method = 'RBF',
-               input_dim = length(lengthscales))
+               arguments = list(input_dim = length(lengthscales),
+                                ARD = TRUE))
 }
+
+exponential_kernel <- function (lengthscales, variance) {
+  greta_kernel("exponential",
+               gpflow_name = 'Exponential',
+               parameters = list(lengthscales = t(lengthscales),
+                                 variance = variance),
+               arguments = list(input_dim = length(lengthscales),
+                                ARD = TRUE))
+}
+
+matern12_kernel <- function (lengthscales, variance) {
+  greta_kernel("Matern 1/2",
+               gpflow_name = 'Matern12',
+               parameters = list(lengthscales = t(lengthscales),
+                                 variance = variance),
+               arguments = list(input_dim = length(lengthscales),
+                                ARD = TRUE))
+}
+
+matern32_kernel <- function (lengthscales, variance) {
+  greta_kernel("Matern 3/2",
+               gpflow_name = 'Matern32',
+               parameters = list(lengthscales = t(lengthscales),
+                                 variance = variance),
+               arguments = list(input_dim = length(lengthscales),
+                                ARD = TRUE))
+}
+
+matern52_kernel <- function (lengthscales, variance) {
+  greta_kernel("Matern 5/2",
+               gpflow_name = 'Matern52',
+               parameters = list(lengthscales = t(lengthscales),
+                                 variance = variance),
+               arguments = list(input_dim = length(lengthscales),
+                                ARD = TRUE))
+}
+
+periodic_kernel <- function (period, lengthscale, variance, dim = 1) {
+  greta_kernel("periodic",
+               gpflow_name = 'PeriodicKernel',
+               parameters = list(period = period,
+                                 lengthscales = lengthscale,
+                                 variance = variance),
+               arguments = list(input_dim = as.integer(dim)))
+}
+
 
 #' @name gp-module
 #' @aliases gp
@@ -198,17 +259,32 @@ rbf <- function (lengthscales, variance) {
 #'   covariance matrix between points in the space of the Gaussian process. See
 #'   the example for a demonstration.
 #'
-#' @param variance (scalar) the marginal variance of a Gaussian process prior
-#'   under this kernel
-#' @param lengthscales (column vector) the decay distance along each dimensions
-#'   of the Gaussian process
-#' @param dim the dimension of the Gaussian process (number of columns on which
-#'   it acts)
+#' @details The kernels are imported from the GPflow python package, using the
+#'   gpflowr R package. Both of those need to be installed before you can use
+#'   these methods. See the \href{gpflow.readthedocs.io}{GPflow website} for
+#'   details of the kernels implemented.
+#'
+#' @param variance,variances (scalar/vector) the variance of a Gaussian process
+#'   prior in all dimensions (\code{variance}) or in each dimensions
+#'   (\code{variances}).
+#' @param lengthscale,lengthscales (scalar/vector) the correlation decay
+#'   distance along all dimensions (\code{lengthscale}) or each dimension
+#'   ((\code{lengthscales})) of the Gaussian process
+#' @param period (scalar) the period of the Gaussian process
+#' @param dim (scalar integer, not a greta array) the dimension of the Gaussian
+#'   process (number of columns on which it acts)
 #'
 #' @section Usage:
 #' \preformatted{
 #'   gp$kernels$bias(variance, dim = 1)
+#'   gp$kernels$white(variance, dim = 1)
+#'   gp$kernels$linear(variances)
 #'   gp$kernels$rbf(lengthscales, variance)
+#'   gp$kernels$exponential(lengthscales, variance)
+#'   gp$kernels$matern12(lengthscales, variance)
+#'   gp$kernels$matern32(lengthscales, variance)
+#'   gp$kernels$matern52(lengthscales, variance)
+#'   gp$kernels$periodic(period, lengthscale, variance)
 #' }
 #'
 #' @examples
@@ -227,5 +303,12 @@ rbf <- function (lengthscales, variance) {
 NULL
 
 #' @export
-gp <- list(kernels = list(bias = bias,
-                          rbf = rbf))
+gp <- list(kernels = list(bias = bias_kernel,
+                          white = white_kernel,
+                          rbf = rbf_kernel,
+                          exponential = exponential_kernel,
+                          linear = linear_kernel,
+                          matern12 = matern12_kernel,
+                          matern32 = matern32_kernel,
+                          matern52 = matern52_kernel,
+                          periodic = periodic_kernel))

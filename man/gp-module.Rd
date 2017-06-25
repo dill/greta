@@ -5,14 +5,18 @@
 \alias{gp}
 \title{methods for Gaussian process modelling}
 \arguments{
-\item{variance}{(scalar) the marginal variance of a Gaussian process prior
-under this kernel}
+\item{variance, variances}{(scalar/vector) the variance of a Gaussian process
+prior in all dimensions (\code{variance}) or in each dimensions
+(\code{variances}).}
 
-\item{lengthscales}{(column vector) the decay distance along each dimensions
-of the Gaussian process}
+\item{lengthscale, lengthscales}{(scalar/vector) the correlation decay
+distance along all dimensions (\code{lengthscale}) or each dimension
+((\code{lengthscales})) of the Gaussian process}
 
-\item{dim}{the dimension of the Gaussian process (number of columns on which
-it acts)}
+\item{period}{(scalar) the period of the Gaussian process}
+
+\item{dim}{(scalar integer, not a greta array) the dimension of the Gaussian
+process (number of columns on which it acts)}
 }
 \description{
 A module providing composable kernel functions for use in
@@ -22,11 +26,24 @@ A module providing composable kernel functions for use in
   covariance matrix between points in the space of the Gaussian process. See
   the example for a demonstration.
 }
+\details{
+The kernels are imported from the GPflow python package, using the
+  gpflowr R package. Both of those need to be installed before you can use
+  these methods. See the \href{gpflow.readthedocs.io}{GPflow website} for
+  details of the kernels implemented.
+}
 \section{Usage}{
 
 \preformatted{
   gp$kernels$bias(variance, dim = 1)
+  gp$kernels$white(variance, dim = 1)
+  gp$kernels$linear(variances)
   gp$kernels$rbf(lengthscales, variance)
+  gp$kernels$exponential(lengthscales, variance)
+  gp$kernels$matern12(lengthscales, variance)
+  gp$kernels$matern32(lengthscales, variance)
+  gp$kernels$matern52(lengthscales, variance)
+  gp$kernels$periodic(period, lengthscale, variance)
 }
 }
 
