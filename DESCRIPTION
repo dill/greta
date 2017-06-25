@@ -33,6 +33,7 @@ Collate:
     'structures.R'
     'extract_replace_combine.R'
     'dynamics_module.R'
+    'gp_module.R'
     'dag_class.R'
     'greta_model_class.R'
     'progress_bar.R'
@@ -49,6 +50,7 @@ Suggests:
     knitr,
     rmarkdown,
     DiagrammeR,
+    gpflowr,
     bayesplot,
     lattice,
     testthat,
