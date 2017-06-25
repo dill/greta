@@ -25,7 +25,11 @@ check_gpflowr <- function () {
 }
 
 # create a greta kernel function (to create ops)
-greta_kernel <- function (kernel_name, gpflow_name, parameters, arguments) {
+greta_kernel <- function (kernel_name,
+                          gpflow_name,
+                          parameters,
+                          components = NULL,
+                          arguments = list()) {
 
   # check GPflow is available and get the kernel method
   check_gpflowr()
@@ -39,6 +43,7 @@ greta_kernel <- function (kernel_name, gpflow_name, parameters, arguments) {
   kernel <- list(name = kernel_name,
                  parameters = parameters,
                  gpflow_method = gpflow_method,
+                 components = components,
                  arguments = arguments)
 
   # check and get the dimension of a target matrix
@@ -118,8 +123,118 @@ greta_kernel <- function (kernel_name, gpflow_name, parameters, arguments) {
 print.greta_kernel_function <- function (x, ...)
   cat(environment(x)$kernel$name, "\n")
 
+#' @export
+is.greta_kernel_function <- function (x)
+  inherits(x, "greta_kernel_function")
+
+# combine greta kernel function objects
+combine_greta_kernel_function <- function(a, b, combine = c('additive', 'multiplicative')) {
+
+  combine <- match.arg(combine)
+
+  if (!is.greta_kernel_function(a) && !is.greta_kernel_function(b)) {
+    stop ("can only combine a greta kernel function",
+          "with another greta kernel function",
+          call. = FALSE)
+  }
+
+  kernel_a <- environment(a)$kernel
+  kernel_b <- environment(b)$kernel
+
+  gpflow_name <- switch(combine,
+                        additive = 'Add',
+                        multiplicative = 'Prod')
+
+  greta_kernel(kernel_name = combine,
+               gpflow_name = gpflow_name,
+               parameters = c(kernel_a$parameters, kernel_b$parameters),
+               components = list(kernel_a, kernel_b))
+
+  # need to get names of the components. Options:
+
+  # 1. work out the names of the members in the top-level object at this point,
+  # and store them in the greta_kernel object. Need to account for naming of
+  # duplicates as e.g. "bias_1", and handle the different names between greta
+  # and gpflowr
+
+  # 2. write own composition class on the R side, then build each gpflow
+  # function one at a time, replacing parameters before combining to the next
+  # level.
+
+  # 2 seems more feasible - just need more code in compile_gpflow_kernel. Would
+  # need to expose all (greta array) component parameters via $parameters in the
+  # combination functions, to have it built properly
+
+  # the order of parameters is more obvious than the naming.
+
+  # so the combination functions have a parameters member which concatenates
+  # those of their children. It must also have two component functions (kernel_a
+  # and kernel_b). In compile_greta_kernel, these should be checked for and
+  # iterated to build up the full tree, copying over the tensors at each stage
+
+  # write a simple recursive function which, if it is a combination, does the
+  # children first.
+
+  # how to ensure the order is correct? Need to return a counter up in the
+  # recursive function, always start with kernel_a in a combination function,
+  # and use the next tensors in order
+
+}
+
+#' @export
+`+.greta_kernel_function` <- function (e1, e2)
+  combine_greta_kernel_function(e1, e2, 'additive')
+
+#' @export
+`*.greta_kernel_function` <- function (e1, e2)
+  combine_greta_kernel_function(e1, e2, 'multiplicative')
+
 # overload addition and multiplication of greta kernels
 # - grab their kernel objects and combine them; then return a kernel function with that information
+
+# recursively iterate through nested greta kernels, creating corresponding
+# gpflow kernels and replacing their parameters with tensors
+recurse_kernel <- function (greta_kernel, tf_parameters, counter) {
+
+  # if it's compound, recursively call this function on the components then
+  # combine them
+  if (!is.null(greta_kernel$components)) {
+
+    a <- recurse_kernel(greta_kernel$components[[1]],
+                        tf_parameters,
+                        counter)
+
+    b <- recurse_kernel(greta_kernel$components[[2]],
+                        tf_parameters,
+                        counter)
+
+    gpflow_kernel <- greta_kernel$gpflow_method(list(a, b))
+
+  } else {
+
+    # get gpflow version of the basis kernel
+    gpflow_kernel <- do.call(greta_kernel$gpflow_method,
+                             greta_kernel$arguments)
+
+    # find the relevant tensors
+    n_param <- length(greta_kernel$parameters)
+    previous <- counter$count
+    counter$count <- counter$count + n_param
+    idx <- previous + seq_len(n_param)
+    tf_parameters <- tf_parameters[idx]
+
+    # put tensors in the gpflow kernel object
+    parameter_names <- names(greta_kernel$parameters)
+    for (i in seq_along(tf_parameters)) {
+      name <- parameter_names[i]
+      gpflow_kernel[[name]] <- tf_parameters[[i]]
+    }
+
+  }
+
+  gpflow_kernel
+
+}
 
 # function to create gpflow kernel from a greta kernel; called when compiling
 # the tf graph
@@ -129,16 +244,9 @@ compile_gpflow_kernel <- function (greta_kernel, tf_parameters) {
   # parameters
   # for now just do flat version
 
-  # get gpflow version
-  gpflow_kernel <- do.call(greta_kernel$gpflow_method,
-                           greta_kernel$arguments)
-
-  # put tensor in the gpflow kernel object
-  parameter_names <- names(greta_kernel$parameters)
-  for (i in seq_along(tf_parameters)) {
-    name <- parameter_names[i]
-    gpflow_kernel[[name]] <- tf_parameters[[i]]
-  }
+  counter <- new.env()
+  counter$count <- 0
+  gpflow_kernel <- recurse_kernel(greta_kernel, tf_parameters, counter)
 
   gpflow_kernel
 
@@ -161,9 +269,9 @@ tf_self_K <- function (X, ..., greta_kernel) {
   gpflow_kernel <- compile_gpflow_kernel(greta_kernel, tf_parameters)
   res <- gpflow_kernel$K(X)
 
-  # create a cholesky factor representation of this
-  chol_res <- chol(res)
-  res$node$representations$cholesky_factor = chol_res$node
+  # # create a cholesky factor representation of this
+  # chol_res <- chol(res)
+  # res$node$representations$cholesky_factor = chol_res$node
 
   res
 
@@ -264,6 +372,9 @@ periodic_kernel <- function (period, lengthscale, variance, dim = 1) {
 #'   these methods. See the \href{gpflow.readthedocs.io}{GPflow website} for
 #'   details of the kernels implemented.
 #'
+#'   The \code{+} and \code{*} operators can be used to combine kernel functions
+#'   from the existing basis kernel functions, as demonstrated in the example.
+#'
 #' @param variance,variances (scalar/vector) the variance of a Gaussian process
 #'   prior in all dimensions (\code{variance}) or in each dimensions
 #'   (\code{variances}).
@@ -299,7 +410,12 @@ periodic_kernel <- function (period, lengthscale, variance, dim = 1) {
 #' x2 <- greta_array(rnorm(10), dim = c(5, 2))
 #' k1(x, x2)
 #'
+#' # create a bias kernel, with the variance as a variable
+#' k2 <- gp$kernels$bias(variance = lognormal(0, 1))
 #'
+#' # combine two kernels and evaluate
+#' K <- k1 + k2
+#' K(x, x2)
 NULL
 
 #' @export

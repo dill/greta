@@ -31,6 +31,9 @@ The kernels are imported from the GPflow python package, using the
   gpflowr R package. Both of those need to be installed before you can use
   these methods. See the \href{gpflow.readthedocs.io}{GPflow website} for
   details of the kernels implemented.
+
+  The \code{+} and \code{*} operators can be used to combine kernel functions
+  from the existing basis kernel functions, as demonstrated in the example.
 }
 \section{Usage}{
 
@@ -59,5 +62,10 @@ k1(x)
 x2 <- greta_array(rnorm(10), dim = c(5, 2))
 k1(x, x2)
 
+# create a bias kernel, with the variance as a variable
+k2 <- gp$kernels$bias(variance = lognormal(0, 1))
 
+# combine two kernels and evaluate
+K <- k1 + k2
+K(x, x2)
 }
