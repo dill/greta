@@ -5,9 +5,26 @@
 \alias{gp}
 \title{methods for Gaussian process modelling}
 \arguments{
+\item{x, x_new}{greta array giving the coordinates at which to evaluate the
+Gaussian process}
+
+\item{kernel}{a kernel function created using one of the \code{gp$kernel}
+methods}
+
+\item{inducing}{an optional greta array giving the coordinates of inducing
+points in a sparse (reduced rank) Gaussian process model}
+
+\item{tol}{a numerical tolerance parameter, added to the diagonal of the
+self-covariance matrix when computing the cholesky decomposition. If the
+sampler is hitting a lot of numerical errors, increasing this parameter
+could help}
+
+\item{f}{a greta array created with \code{gp$gp} representing the values of a
+Gaussian process}
+
 \item{variance, variances}{(scalar/vector) the variance of a Gaussian process
-prior in all dimensions (\code{variance}) or in each dimensions
-(\code{variances}).}
+prior in all dimensions (\code{variance}) or in each dimension
+(\code{variances})}
 
 \item{lengthscale, lengthscales}{(scalar/vector) the correlation decay
 distance along all dimensions (\code{lengthscale}) or each dimension
@@ -19,25 +36,34 @@ distance along all dimensions (\code{lengthscale}) or each dimension
 process (number of columns on which it acts)}
 }
 \description{
-A module providing composable kernel functions for use in
-  Gaussian process models. Currently the only provided methods are the kernel
-  constructor functions under gp$kernels. Each of these returns a
-  \emph{function} which can be executed on greta arrays to compute the
-  covariance matrix between points in the space of the Gaussian process. See
-  the example for a demonstration.
+A module providing a simple interface for constructing kernel
+  functions and using them in Gaussian process models.
 }
 \details{
-The kernels are imported from the GPflow python package, using the
-  gpflowr R package. Both of those need to be installed before you can use
-  these methods. See the \href{gpflow.readthedocs.io}{GPflow website} for
-  details of the kernels implemented.
+The kernel constructor functions each return a \emph{function} which
+  can be executed on greta arrays to compute the covariance matrix between
+  points in the space of the Gaussian process. The \code{+} and \code{*}
+  operators can be used to combine kernel functions to create new kernel
+  functions.
 
-  The \code{+} and \code{*} operators can be used to combine kernel functions
-  from the existing basis kernel functions, as demonstrated in the example.
+  The kernels are imported from the GPflow python package, using the gpflowr
+  R package. Both of those need to be installed before you can use these
+  methods. See the \href{gpflow.readthedocs.io}{GPflow website} for details
+  of the kernels implemented.
+
+  \code{gp$gp()} returns a greta array representing the values of the
+  Gaussian process evaluated at \code{x}. This Gaussian process can be made
+  sparse (via a reduced-rank representation of the covariance) by providing
+  an additional set of inducing point coordinates \code{inducing}.
+  \code{gp$project()} evaluates the values of an existing Gaussian process
+  (created with \code{gp$gp()}) to new data.
 }
 \section{Usage}{
 
 \preformatted{
+  gp$gp(x, kernel, inducing = NULL, tol = 0)
+  gp$predict(f, x_new, kernel = NULL)
+
   gp$kernels$bias(variance, dim = 1)
   gp$kernels$white(variance, dim = 1)
   gp$kernels$linear(variances)
@@ -68,4 +94,17 @@ k2 <- gp$kernels$bias(variance = lognormal(0, 1))
 # combine two kernels and evaluate
 K <- k1 + k2
 K(x, x2)
+
+# use this kernel in a full-rank Gaussian process
+x <- 1:10
+f = gp$gp(1:10, K)
+
+# or in sparse Gaussian process
+f_sparse = gp$gp(1:10, K, inducing = c(2, 5, 8))
+
+# project the values of the GP to new locations
+f_new <- gp$project(f, 11:15)
+
+# project with a different kernel (e.g. a sub-kernel)
+f_new_bias <- gp$project(f, 11:15, k2)
 }
