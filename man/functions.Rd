@@ -72,8 +72,18 @@ TensorFlow only enables rounding to integers, so \code{round()} will
  min(..., na.rm = TRUE)
  max(..., na.rm = TRUE)
 
- # miscellaneous operations
+ # sweep out array summaries
  sweep(x, MARGIN, STATS, FUN = c('-', '+', '/', '*'))
+
+ # cumulative sums and products
+ cumsum(x)
+ cumprod(x)
+
+ # solve an upper or lower triangular system
+ backsolve(r, x, k = ncol(r), upper.tri = TRUE,
+           transpose = FALSE)
+ forwardsolve(l, x, k = ncol(l), upper.tri = FALSE,
+              transpose = FALSE)
 
  }
 }

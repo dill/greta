@@ -52,8 +52,18 @@
 #'  min(..., na.rm = TRUE)
 #'  max(..., na.rm = TRUE)
 #'
-#'  # miscellaneous operations
+#'  # sweep out array summaries
 #'  sweep(x, MARGIN, STATS, FUN = c('-', '+', '/', '*'))
+#'
+#'  # cumulative sums and products
+#'  cumsum(x)
+#'  cumprod(x)
+#'
+#'  # solve an upper or lower triangular system
+#'  backsolve(r, x, k = ncol(r), upper.tri = TRUE,
+#'            transpose = FALSE)
+#'  forwardsolve(l, x, k = ncol(l), upper.tri = FALSE,
+#'               transpose = FALSE)
 #'
 #'  }
 #'
@@ -466,6 +476,80 @@ sweep.greta_array <- function (x, MARGIN, STATS, FUN = c('-', '+', '/', '*'), ch
      operation_args = list(MARGIN = MARGIN,
                            FUN = FUN),
      tf_operation = 'tf_sweep',
+     dimfun = dimfun)
+
+}
+
+#' @export
+cumsum.greta_array <- function (x)
+  op('cumsum', x, tf_operation = 'tf$cumsum')
+
+#' @export
+cumprod.greta_array <- function (x)
+  op('cumprod', x, tf_operation = 'tf$cumprod')
+
+#' @rdname overloaded
+#' @export
+backsolve <- function (r, x, k = ncol(r), upper.tri = TRUE, transpose = FALSE)
+  UseMethod('backsolve', x)
+
+#' @export
+backsolve.default <- base::backsolve
+
+#' @export
+backsolve.greta_array <- function(r, x,
+                                  k = ncol(r),
+                                  upper.tri = TRUE,
+                                  transpose = FALSE) {
+  if (k != ncol(r)) {
+    stop ("k must equal ncol(r) for greta arrays",
+          call. = FALSE)
+  }
+  if (transpose) {
+    stop ("transpose must be FALSE for greta arrays",
+          call. = FALSE)
+  }
+
+  dimfun <- function (elem_list)
+    dim(elem_list[[2]])
+
+  op("backsolve",
+     r, x,
+     operation_args = list(lower = !upper.tri),
+     tf_operation = "tf$matrix_triangular_solve",
+     dimfun = dimfun)
+
+}
+
+#' @rdname overloaded
+#' @export
+forwardsolve <- function (l, x, k = ncol(r), upper.tri = FALSE, transpose = FALSE)
+  UseMethod('forwardsolve', x)
+
+#' @export
+forwardsolve.default <- base::forwardsolve
+
+#' @export
+forwardsolve.greta_array <- function (l, x,
+                                      k = ncol(l),
+                                      upper.tri = FALSE,
+                                      transpose = FALSE) {
+  if (k != ncol(l)) {
+    stop ("k must equal ncol(r) for greta arrays",
+          call. = FALSE)
+  }
+  if (transpose) {
+    stop ("transpose must be FALSE for greta arrays",
+          call. = FALSE)
+  }
+
+  dimfun <- function (elem_list)
+    dim(elem_list[[2]])
+
+  op("forwardsolve",
+     l, x,
+     operation_args = list(lower = !upper.tri),
+     tf_operation = "tf$matrix_triangular_solve",
      dimfun = dimfun)
 
 }

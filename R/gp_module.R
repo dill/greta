@@ -2,6 +2,8 @@
 
 # check availability of GPflow and gpflowr, error nicely if they aren't
 # installed, and put the module in the calling environment if they are
+
+#' @importFrom reticulate py_set_attr
 check_gpflowr <- function () {
 
   gpflowr_available <- requireNamespace('gpflowr', quietly = TRUE)
@@ -16,11 +18,27 @@ check_gpflowr <- function () {
 
   } else {
 
-    assign('gpflow',
-           gpflowr::gpflow,
-           envir = parent.frame())
+    gpf <- gpflowr::gpflow
+    settings <- gpf$settings$get_settings()
+    settings$dtypes$float_type <- tf_float()
+
+    with (gpf$settings$temp_settings(settings),
+          assign('gpflow',
+                 gpf,
+                 envir = globalenv())
+    )
 
   }
+
+}
+
+do_gpflow <- function (expr) {
+
+  settings <- gpflow$settings$get_settings()
+  settings$dtypes$float_type <- tf_float()
+
+  with (gpflow$settings$temp_settings(settings) %as% gpflow,
+        expr)
 
 }
 
@@ -95,7 +113,7 @@ greta_kernel <- function (kernel_name,
                 call. = FALSE)
         }
 
-        c(X_prime_dim[1], X_dim[1])
+        c(X_dim[1], X_prime_dim[1])
       }
 
     }
@@ -149,35 +167,6 @@ combine_greta_kernel_function <- function(a, b, combine = c('additive', 'multipl
                gpflow_name = gpflow_name,
                parameters = c(kernel_a$parameters, kernel_b$parameters),
                components = list(kernel_a, kernel_b))
-
-  # need to get names of the components. Options:
-
-  # 1. work out the names of the members in the top-level object at this point,
-  # and store them in the greta_kernel object. Need to account for naming of
-  # duplicates as e.g. "bias_1", and handle the different names between greta
-  # and gpflowr
-
-  # 2. write own composition class on the R side, then build each gpflow
-  # function one at a time, replacing parameters before combining to the next
-  # level.
-
-  # 2 seems more feasible - just need more code in compile_gpflow_kernel. Would
-  # need to expose all (greta array) component parameters via $parameters in the
-  # combination functions, to have it built properly
-
-  # the order of parameters is more obvious than the naming.
-
-  # so the combination functions have a parameters member which concatenates
-  # those of their children. It must also have two component functions (kernel_a
-  # and kernel_b). In compile_greta_kernel, these should be checked for and
-  # iterated to build up the full tree, copying over the tensors at each stage
-
-  # write a simple recursive function which, if it is a combination, does the
-  # children first.
-
-  # how to ensure the order is correct? Need to return a counter up in the
-  # recursive function, always start with kernel_a in a combination function,
-  # and use the next tensors in order
 
 }
 
