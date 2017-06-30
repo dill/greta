@@ -19,8 +19,6 @@ check_gpflowr <- function () {
   } else {
 
     gpf <- gpflowr::gpflow
-    settings <- gpf$settings$get_settings()
-    settings$dtypes$float_type <- tf_float()
 
     with (gpf$settings$temp_settings(settings),
           assign('gpflow',
@@ -29,16 +27,6 @@ check_gpflowr <- function () {
     )
 
   }
-
-}
-
-do_gpflow <- function (expr) {
-
-  settings <- gpflow$settings$get_settings()
-  settings$dtypes$float_type <- tf_float()
-
-  with (gpflow$settings$temp_settings(settings) %as% gpflow,
-        expr)
 
 }
 
@@ -178,9 +166,6 @@ combine_greta_kernel_function <- function(a, b, combine = c('additive', 'multipl
 `*.greta_kernel_function` <- function (e1, e2)
   combine_greta_kernel_function(e1, e2, 'multiplicative')
 
-# overload addition and multiplication of greta kernels
-# - grab their kernel objects and combine them; then return a kernel function with that information
-
 # recursively iterate through nested greta kernels, creating corresponding
 # gpflow kernels and replacing their parameters with tensors
 recurse_kernel <- function (greta_kernel, tf_parameters, counter) {
@@ -229,15 +214,9 @@ recurse_kernel <- function (greta_kernel, tf_parameters, counter) {
 # the tf graph
 compile_gpflow_kernel <- function (greta_kernel, tf_parameters) {
 
-  # take kernel object for each sub-kernel, assign the relevant parts of the
-  # parameters
-  # for now just do flat version
-
   counter <- new.env()
   counter$count <- 0
-  gpflow_kernel <- recurse_kernel(greta_kernel, tf_parameters, counter)
-
-  gpflow_kernel
+  recurse_kernel(greta_kernel, tf_parameters, counter)
 
 }
 
@@ -335,7 +314,6 @@ periodic_kernel <- function (period, lengthscale, variance, dim = 1) {
                                  variance = variance),
                arguments = list(input_dim = as.integer(dim)))
 }
-
 
 # create a zero-mean Gaussian process with control points at x, and the specified kernel
 gp_gp <- function (x, kernel, inducing = NULL, tol = 0) {
