@@ -6,6 +6,32 @@
 #' @importFrom reticulate py_set_attr
 check_gpflowr <- function () {
 
+  # create/modify a gpflow config file whilst loading gpflow
+  config <- './.gpflowrc'
+  extant <- file.exists(config)
+
+  cleanup <- function () {
+    file.remove(config)
+    if (extant)
+      file.rename(config_temp, config)
+  }
+  on.exit(cleanup())
+
+  if (extant)
+    file.rename(config, (config_temp <- tempfile()))
+
+  file.create(config)
+
+  # get float type
+  type <- capture.output(options()$greta_tf_float)
+  float_text <- switch(type,
+                 "<dtype: 'float32'>" = "float32",
+                 "<dtype: 'float64'>" = "float64")
+
+  text <- sprintf("[dtypes]\nfloat_type = %s\nint_type = int32\n", float_text)
+  cat(text, file = config)
+
+
   gpflowr_available <- requireNamespace('gpflowr', quietly = TRUE)
 
   if (gpflowr_available)
@@ -18,13 +44,9 @@ check_gpflowr <- function () {
 
   } else {
 
-    gpf <- gpflowr::gpflow
-
-    with (gpf$settings$temp_settings(settings),
-          assign('gpflow',
-                 gpf,
-                 envir = globalenv())
-    )
+    assign('gpflow',
+           gpflowr::gpflow,
+           envir = globalenv())
 
   }
 
@@ -37,18 +59,13 @@ greta_kernel <- function (kernel_name,
                           components = NULL,
                           arguments = list()) {
 
-  # check GPflow is available and get the kernel method
-  check_gpflowr()
-
-  gpflow_method <- gpflow$kernels[[gpflow_name]]
-
   kernel_name <- paste(kernel_name, "kernel function")
 
   parameters <- lapply(parameters, as.greta_array)
 
   kernel <- list(name = kernel_name,
                  parameters = parameters,
-                 gpflow_method = gpflow_method,
+                 gpflow_method = gpflow_name,
                  components = components,
                  arguments = arguments)
 
@@ -170,6 +187,8 @@ combine_greta_kernel_function <- function(a, b, combine = c('additive', 'multipl
 # gpflow kernels and replacing their parameters with tensors
 recurse_kernel <- function (greta_kernel, tf_parameters, counter) {
 
+  gpflow_fun <- gpflow$kernels[[greta_kernel$gpflow_method]]
+
   # if it's compound, recursively call this function on the components then
   # combine them
   if (!is.null(greta_kernel$components)) {
@@ -182,12 +201,12 @@ recurse_kernel <- function (greta_kernel, tf_parameters, counter) {
                         tf_parameters,
                         counter)
 
-    gpflow_kernel <- greta_kernel$gpflow_method(list(a, b))
+    gpflow_kernel <- gpflow_fun(list(a, b))
 
   } else {
 
     # get gpflow version of the basis kernel
-    gpflow_kernel <- do.call(greta_kernel$gpflow_method,
+    gpflow_kernel <- do.call(gpflow_fun,
                              greta_kernel$arguments)
 
     # find the relevant tensors
@@ -214,6 +233,8 @@ recurse_kernel <- function (greta_kernel, tf_parameters, counter) {
 # the tf graph
 compile_gpflow_kernel <- function (greta_kernel, tf_parameters) {
 
+  # check GPflow is available and load with correct settings
+  check_gpflowr()
   counter <- new.env()
   counter$count <- 0
   recurse_kernel(greta_kernel, tf_parameters, counter)
