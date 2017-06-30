@@ -244,7 +244,6 @@ compile_gpflow_kernel <- function (greta_kernel, tf_parameters) {
 # create gpflow kernel and evaluate with tensors
 tf_K <- function (X, X_prime, ..., greta_kernel) {
 
-  # evaluate with tensors
   tf_parameters <- list(...)
   gpflow_kernel <- compile_gpflow_kernel(greta_kernel, tf_parameters)
   gpflow_kernel$K(X, X_prime)
@@ -253,16 +252,9 @@ tf_K <- function (X, X_prime, ..., greta_kernel) {
 
 tf_self_K <- function (X, ..., greta_kernel) {
 
-  # evaluate with tensors
   tf_parameters <- list(...)
   gpflow_kernel <- compile_gpflow_kernel(greta_kernel, tf_parameters)
-  res <- gpflow_kernel$K(X)
-
-  # # create a cholesky factor representation of this
-  # chol_res <- chol(res)
-  # res$node$representations$cholesky_factor = chol_res$node
-
-  res
+  gpflow_kernel$K(X)
 
 }
 
@@ -353,7 +345,7 @@ gp_gp <- function (x, kernel, inducing = NULL, tol = 0) {
     inducing <- x
 
   # calculate key objects
-  n <- length(inducing)
+  n <- nrow(inducing)
   v <- normal(0, 1, dim = n)
   Kmm <- kernel(inducing)
 
