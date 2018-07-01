@@ -83,7 +83,12 @@ NULL
 
 #' @export
 `*.greta_array` <- function (e1, e2) {
+
+  e1 <- as.greta_array(e1)
+  e2 <- as.greta_array(e2)
+
   check_dims(e1, e2)
+
   ga <- op("multiply", e1, e2,
            tf_operation = "tf$multiply")
 
@@ -102,6 +107,9 @@ NULL
 
 #' @export
 `/.greta_array` <- function (e1, e2) {
+
+  e1 <- as.greta_array(e1)
+  e2 <- as.greta_array(e2)
 
   check_dims(e1, e2)
 
